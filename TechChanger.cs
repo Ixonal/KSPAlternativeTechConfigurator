@@ -21,8 +21,8 @@ namespace ATC
 
         string debugCombo = "^D";
         string reloadCombo = "^R";
+        string createNewCombo = "^N";
 
-        private List<RDNode> nodesWithConfigEntries = new List<RDNode>();
         private List<RDNode.Parent> parentConnectionsAlreadyProcessed = new List<RDNode.Parent>();
 
         void Start()
@@ -72,6 +72,12 @@ namespace ATC
                 Debug.Log("-------ATC Reloading Tree triggered-----------------");
                 loadOnNextUpdate = true;     
             }
+
+            if (!loadOnNextUpdate && Event.current.Equals(Event.KeyboardEvent(createNewCombo)))
+            {
+                Debug.Log("-------ATC attempting to create new node-----------------");
+                RDNode node = RDNodeFactory.Instance.Create("TestNode");
+            }
         }
 
         public void Update()
@@ -85,7 +91,7 @@ namespace ATC
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError("ATC: Error Loading tree - " + ex.Message + " at " + ex.StackTrace);
+                    Debug.Log("ATC: Error Loading tree - " + ex.Message + " at " + ex.StackTrace);
                 }
                 loadOnNextUpdate = false;
             }
@@ -146,7 +152,6 @@ namespace ATC
             debugCombo = settings.GetValue("debugDumpKeyCombo");
             reloadCombo = settings.GetValue("reloadKeyCombo");
 
-            nodesWithConfigEntries.Clear();
             parentConnectionsAlreadyProcessed.Clear();
 
             foreach (ConfigNode activeTreeCfg in settings.GetNodes("ACTIVE_TECH_TREE"))
@@ -172,8 +177,6 @@ namespace ATC
                     if (treeNode.treeNode)
                     {
                         updateNode(treeNode, cfgNodeModify);
-
-                        nodesWithConfigEntries.Add( treeNode );
                     }
                     else
                     {
@@ -182,14 +185,14 @@ namespace ATC
 
                 }//end for all nodes;
 
+
                 //deactivated for now
-                //processNewNodes(tree);
+                processNewNodes(tree);
                 
 
 
             }//end foreach tree-config
 
-            deleteAbsentNodes();
 
             List<RDNode> topoSortedNodes = calculateTopologicalSorting();
             foreach (RDNode rdNode in topoSortedNodes)
@@ -200,7 +203,7 @@ namespace ATC
                 {
                     if (parentConnectionsAlreadyProcessed.Contains(rdNode.parents[i]))
                     {
-                        //Debug.Log("Skipping auto-anchor assignment for node " + rdNode.gameObject.name);                            
+                        Debug.Log("Skipping auto-anchor assignment for node " + rdNode.gameObject.name);                            
                     }
                     else {
                         setupAnchors(rdNode, ref rdNode.parents[i]);
@@ -230,13 +233,55 @@ namespace ATC
                     if (!Array.Exists<RDNode>(AssetBase.RnDTechTree.GetTreeNodes(), x => x.gameObject.name == newName))
                     {
 
-                        RDNode newNode = createNode();
+                        Debug.Log("Number of tech entries before creating a new node: " + AssetBase.RnDTechTree.GetTreeNodes().Count());
+
+                        RDNode newNode = RDNodeFactory.Instance.Create(); //createNode();
+
+                        Debug.Log("Number of tech entries after creating a new node: " + AssetBase.RnDTechTree.GetTreeNodes().Count());
 
                         if (newNode.tech == null)
                             Debug.Log("newNode.tech is null after createNode");
 
                         //if (newNode.gameObject == null)
                         //    Debug.Log("newNode.gameObject is null after c-tor");
+
+                        //Debug.Log("calling rdNode.Warmup()");
+                        //newNode.Warmup(newTech);
+                        //Debug.Log("NEWNODE: after Setup(), startNode has " + findStartNode().children.Count() + " children");
+
+                        Debug.Log("New node's gameobject is active: " + (newNode.gameObject.activeSelf));
+                        Debug.Log("New node's gameobject is active in heirarchy: " + (newNode.gameObject.activeInHierarchy));
+
+                        Debug.Log("created node and tech, now setting basic tech parameters");
+                        //setup all the basic parameters that are not handled in updatenode
+                        newNode.treeNode = true;
+                        newNode.gameObject.name = newName;
+                        newNode.name = newName.Substring(newName.IndexOf("_"));
+                        newNode.tech.techID = newNode.name;
+                        newNode.SetButtonState(RDNode.State.RESEARCHABLE);
+
+                        newNode.tech.hideIfNoParts = false;
+
+                        if (ResearchAndDevelopment.Instance != null)
+                        {
+                            ProtoTechNode techProto = ResearchAndDevelopment.Instance.GetTechState(newNode.tech.techID) ?? new ProtoTechNode
+                            {
+                                partsPurchased = newNode.tech.partsPurchased,
+                                techID = newNode.tech.techID
+                            };
+                            newNode.tech.state = techProto.state;
+                            techProto.UpdateFromTechNode(newNode.tech);
+                            ResearchAndDevelopment.Instance.SetTechState(newName, techProto);
+                        }
+
+                        Debug.Log("updating node with cfgFile-parameters");
+                        updateNode(newNode, cfgNodeNew);
+
+
+                        Debug.Log("number of node parents: " + (newNode.parents.Length));
+
+                        Debug.Log("now warming up tech");
+                        newNode.Warmup(newNode.tech);
 
                         Debug.Log("calling newnode.setup");
                         newNode.Setup(); //This sets the anchor offsets
@@ -245,32 +290,29 @@ namespace ATC
                             Debug.Log("newNode.gameObject is still null after Setup");
 
 
-                        //Debug.Log("calling rdNode.Warmup()");
-                        //newNode.Warmup(newTech);
-                        //Debug.Log("NEWNODE: after Setup(), startNode has " + findStartNode().children.Count() + " children");
 
-
-                        Debug.Log("created node and tech, now setting basic tech parameters");
-                        //setup all the basic parameters that are not handled in updatenode
-                        newNode.treeNode = true;
-                        newNode.gameObject.name = newName;
-                        newNode.name = newName.Substring(newName.IndexOf("_"));
-                        newNode.tech.techID = newNode.name;
-
-                        newNode.tech.hideIfNoParts = false;
-
-                        Debug.Log("updating node with cfgFile-parameters");
-                        updateNode(newNode, cfgNodeNew);
                         Debug.Log("created new RDNode " + newNode.gameObject.name + " with RDTech.title=" + newNode.tech.title + "(techId) =" + newNode.tech.techID);
                         //Debug.Log("NEWNODE: after updateNode(), startNode has " + findStartNode().children.Count() + " children");
 
+                        Debug.Log("Tech tree already contains new node: " + (AssetBase.RnDTechTree.GetTreeNodes().Contains(newNode)));
 
-                        RDController rdControl = GameObject.FindObjectOfType<RDController>();
+                        
+                        //object rdControl = AssetBase.g;
                         Debug.Log("NEWNODE: calling RegisterNode(), AssetBase.TechTree has  " + AssetBase.RnDTechTree.GetTreeNodes().Count() + " entries");
 
-                        rdControl.RegisterNode(newNode); //TODO maybe this needs to be done the other way around?
+
+                        //AssetBase.RnDTechTree.
+                        //Debug.Log("RDController instance ID: " + newNode.controller.GetInstanceID());
+                        //object rdController = 
+                        //Debug.Log("RDController exists: " + (rdController != null));
+                        newNode.controller.RegisterNode(newNode);
+                        //newNode.controller.UpdatePanel();
+                        //rdControl.RegisterNode(newNode); //TODO maybe this needs to be done the other way around?
                         Debug.Log("NEWNODE: after RegisterNode(), AssetBase.TechTree has  " + AssetBase.RnDTechTree.GetTreeNodes().Count() + " entries");
 
+                        newNode.Eviscerate();
+                        newNode.Start();
+                        newNode.UpdateGraphics();
 
                         //Debug.Log("Invoking rdController.registerNode");
                         //typeof(RDNode).GetMethod("InitializeArrows", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(newNode, new object[] { });
@@ -356,7 +398,7 @@ namespace ATC
                 if (cfgNode.HasValue("posY"))
                     newPos.y = float.Parse(cfgNode.GetValue("posY"));
 
-                moveNode(treeNode, newPos.x, newPos.y);
+                treeNode.transform.localPosition = newPos;
             }          
 
         }
@@ -485,6 +527,7 @@ namespace ATC
             connection.parent.anchor = possibleParentAnchors.First();
         }
 
+        [Obsolete("Functionality has been moved to the RDNodeFactory class")]
         private RDNode createNode()
         {
             //Debug.Log("creating new RDNode");
@@ -502,6 +545,7 @@ namespace ATC
                 if (nodePrefab.GetComponent<RDTech>() == null)
                     Debug.Log ("wtf - nodePrefab.getComponent<RDTech> is null");
 
+                RDTech prefabTech = nodePrefab.GetComponent<RDTech>();
                 nodePrefab.GetComponent<RDTech>().techID = "newTech_RenameMe";
                 nodePrefab.GetComponent<RDNode>().tech = nodePrefab.GetComponent<RDTech>();
                 nodePrefab.GetComponent<RDNode>().prefab = startNode.prefab;
@@ -574,7 +618,7 @@ namespace ATC
                     //Debug.Log("found matching body " + body.
                     try
                     {
-                        //Debug.Log("ATC: Modifying celestialBody science params for " + bodyName);
+                        Debug.Log("ATC: Modifying celestialBody science params for " + bodyName);
                         //Science value factors
                         if (scienceParamsNode.HasValue("LandedDataValue"))
                             body.scienceValues.LandedDataValue = float.Parse(scienceParamsNode.GetValue("LandedDataValue"));
@@ -600,7 +644,7 @@ namespace ATC
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError("Error setting Science Params for celestial " + bodyName + ": Exception " + ex + " at " + ex.StackTrace);
+                        Debug.LogError(ex);
                     }
                 }//endfor each celestialbody-string
             }//endfor each tree-configfile
@@ -671,7 +715,6 @@ namespace ATC
 
         private void updateParentsForNode(RDNode treeNode, ConfigNode treeCfg)
         {
-            //Debug.Log("updating parents for node " + treeNode.gameObject.name);
             //clear all old parents. The RD-Scene will take care of drawing the arrows
             clearParentsFromNode( treeNode );
 
@@ -685,10 +728,8 @@ namespace ATC
 
                     RDNode parentNode = Array.Find<RDNode>(AssetBase.RnDTechTree.GetTreeNodes(), x => x.gameObject.name == parentName);
 
-                    if (parentNode) //Default-constructed RDNode (if search fails) fails this test
+                    if (parentNode.gameObject.name == parentName)
                     {
-                        //Debug.Log("   --- parentnode: " + parentName);
-            
                         parentNode.children.Add(treeNode);
 
                         RDNode.Parent connection;
@@ -715,55 +756,13 @@ namespace ATC
                     }
                     else
                     {
-                        Debug.LogError("ATC: Invalid parent node specified for: " + treeNode.gameObject.name + " parent: " + parentName);
+                        Debug.Log("ATC: Invalid parent node specified for: " + treeNode.gameObject.name + " parent: " + parentName);
                     }
                 }
 
             }
 
             treeNode.parents = connectionList.ToArray();
-        }
-
-        private void deleteAbsentNodes()
-        {
-            // This function "removes" any stock nodes absent in the current tree so that they may be deleted through standard "!TECH_NODE[]" syntax, or simply omitted from a tree when creating it
-            // from scratch.  This should be done after all other processing as it will automatically update parent dependencies in other nodes so as to not reference deleted ones.
-
-            foreach (RDNode tempRDNode in AssetBase.RnDTechTree.GetTreeNodes())
-            {
-                if ( !nodesWithConfigEntries.Contains( tempRDNode ) )
-                {
-                    // this RDNode does not exist within the current tech tree.  Get rid of it.
-
-                    deleteRDNode(tempRDNode);
-                }
-            }
-        }
-
-        private void deleteRDNode(RDNode node)
-        {
-            // function to effectively remove stock RD nodes
-
-            node.tech.hideIfNoParts = true;
-
-            clearParentsFromNode(node);
-            clearChildrenFromNode(node);
-
-            // move node outside the visible area in case it contains parts already researched (purchased parts doesn't seem to be reliably initialized upon entering space center)
-
-            moveNode(node, 500, 0);
-
-            // clear all part assignments on both the node and part side
-
-            node.tech.partsAssigned.Clear();
-
-            foreach (AvailablePart tempPart in PartLoader.LoadedPartsList)
-            {
-                if (tempPart.TechRequired == node.tech.techID)
-                {
-                    tempPart.TechRequired = "unassigned";
-                }
-            }            
         }
 
         private void clearParentsFromNode(RDNode treeNode)
@@ -773,31 +772,7 @@ namespace ATC
                 oldParent.parent.node.children.Remove(treeNode);                  
             }
 
-            treeNode.parents = new RDNode.Parent[0];
-        }
-
-        private void clearChildrenFromNode(RDNode treeNode)
-        {
-            foreach (RDNode tempChild in treeNode.children)
-            {
-                List<RDNode.Parent> childParentList = tempChild.parents.ToList();
-
-                childParentList.Remove(childParentList.Find(tempParentConnection => tempParentConnection.parent.node == treeNode));
-
-                tempChild.parents = childParentList.ToArray();
-            }
-
-            treeNode.children.Clear();
-        }
-
-        private void moveNode(RDNode treeNode, float xPos, float yPos)
-        {
-            Vector3 newPos = treeNode.transform.localPosition;
-
-            newPos.x = xPos;
-            newPos.y = yPos;
-
-            treeNode.transform.localPosition = newPos;
+            Array.Clear(treeNode.parents, 0, treeNode.parents.Count());
         }
     }
 }
