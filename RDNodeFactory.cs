@@ -49,6 +49,8 @@ namespace ATC
 
         #region Properties and Fields
 
+        private const string _newNodeName = "newnode_rename";
+
         //we should only need one instance of this to create a new item (as one would with a prototype in Javascript)
         private static GameObject _nodePrefab;
         private static GameObject nodePrefab
@@ -78,16 +80,14 @@ namespace ATC
 
                 Debug.Log("Existing node prefab name: " + existingNode.prefab.name);
 
-                //In this case, we have to create a new prefab. Unfortunately, RDNode throws an argument null exception when the prefab tries to add it.
-                //Since it seems to be able to recover after this, it must not be too much of an issue.
                 _nodePrefab = new GameObject();
-                //_nodePrefab.name = "DefaultNodePrefab";
+                _nodePrefab.name = _newNodeName;
                 _nodePrefab.transform.parent = existingNode.transform.parent;
 
                 Debug.Log("Creating RDNode...");
                 RDNode nodePart = _nodePrefab.AddComponent("RDNode") as RDNode;
                 //RDNode nodePart = _nodePrefab.GetComponent<RDNode>();
-                nodePart.name = "newtech_rename";
+                nodePart.name = _newNodeName;
                 nodePart.description = "";
                 nodePart.controller = existingNode.controller;
                 nodePart.scale = existingNode.scale;
@@ -101,8 +101,9 @@ namespace ATC
 
                 Debug.Log("Creating RDTech...");
                 RDTech techPart = nodePart.tech = _nodePrefab.AddComponent("RDTech") as RDTech;
+                techPart.name = _newNodeName;
                 techPart.state = RDTech.State.Available;
-                techPart.techID = nodePart.name;
+                techPart.techID = _newNodeName;
                 techPart.partsAssigned = new List<AvailablePart>();
                 techPart.partsPurchased = new List<AvailablePart>();
                 //RDTech techPart = nodePart.tech = _nodePrefab.GetComponent<RDTech>();
