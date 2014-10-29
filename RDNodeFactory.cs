@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using UnityEngine;
 
 namespace ATC
 {
-    public class RDNodeFactory
+    public class RDNodeFactory : UnityEngine.Object
     {
         #region Singleton Instantiation
 
@@ -31,29 +32,25 @@ namespace ATC
 
         #endregion
 
-        //private class RDNodePrefab : RDNode
-        //{
-        //    public RDNodePrefab()
-        //    {
-        //        children = new List<RDNode>();
-        //        controller = GameObject.FindObjectOfType<RDController>();
-        //        parents = new Parent[0];
-        //        treeNode = true;
-        //        prefab = new GameObject();
-        //        SetButtonState(State.HIDDEN);
-        //        SetIconState(Icon.GENERIC);
-        //        Setup();
-        //    }
-
-        //}
-
         #region Properties and Fields
 
+        private static List<RDNode> _existingNodes = new List<RDNode>();
+
         private const string _newNodeName = "newnode_rename";
+        private const string _newTechName = "newtech_rename";
+
+        private static readonly System.Random _rng = new System.Random();
+
+        private static RDNode GetRandomExistingNode()
+        {
+            return AssetBase.RnDTechTree.GetTreeNodes()
+                                        .OrderBy(n => _rng.Next())
+                                        .FirstOrDefault(n => n.treeNode);
+        }
 
         //we should only need one instance of this to create a new item (as one would with a prototype in Javascript)
         private static GameObject _nodePrefab;
-        private static GameObject nodePrefab
+        private static GameObject NodePrefab
         {
             get
             {
@@ -65,51 +62,38 @@ namespace ATC
                 }
 
                 Debug.Log("Creating a default Node Prefab instance.");
-                RDNode existingNode = AssetBase.RnDTechTree.GetTreeNodes().OrderBy(n => new System.Random().Next()).FirstOrDefault(n => n.controller != null);
-                //RDNode existingNode = GameObject.FindObjectsOfType<RDNode>().FirstOrDefault(n => n.treeNode && n.controller != null);
+                RDNode existingNode = GetRandomExistingNode();
+                //RDNode existingNode = GameObject.FindObjectsOfType(typeof(RDNode)).Cast<RDNode>().FirstOrDefault(n => n.treeNode && n.controller != null);
 
                 if (existingNode == null)
                 {
-                    Debug.Log("No existing node on KSP startup... that should never happen.");
+                    throw new NullReferenceException("No existing node on KSP startup... that should never happen.");
                 }
 
-                Debug.Log("Existing node has controller: " + (existingNode.controller != null));
-                Debug.Log("Existing node has graphics: " + (existingNode.graphics != null));
+                Debug.Log("existingNode: " + existingNode);
 
-                Debug.Log("RDNodePrefab exists anywhere: " + (GameObject.FindObjectsOfType<RDNodePrefab>().Any()));
-
-                Debug.Log("Existing node prefab name: " + existingNode.prefab.name);
-
-                _nodePrefab = new GameObject();
-                _nodePrefab.name = _newNodeName;
+                _nodePrefab = new GameObject(_newNodeName);
                 _nodePrefab.transform.parent = existingNode.transform.parent;
+                _nodePrefab.transform.localPosition = existingNode.transform.localPosition;
+                _nodePrefab.SetActive(false);
 
                 Debug.Log("Creating RDNode...");
-                RDNode nodePart = _nodePrefab.AddComponent("RDNode") as RDNode;
-                //RDNode nodePart = _nodePrefab.GetComponent<RDNode>();
+                RDNode nodePart = _nodePrefab.AddComponent<RDNode>();
                 nodePart.name = _newNodeName;
                 nodePart.description = "";
                 nodePart.controller = existingNode.controller;
                 nodePart.scale = existingNode.scale;
-                nodePart.treeNode = true;
                 nodePart.prefab = existingNode.prefab;
+                nodePart.icon = RDNode.Icon.GENERIC;
                 nodePart.parents = new RDNode.Parent[0]; //don't want this to be null, but also don't want it to have null elements
-
-                RDNodePrefab prefabPart = nodePart.graphics = _nodePrefab.AddComponent("RDNodePrefab") as RDNodePrefab;
 
                 Debug.Log("nodePart exists: " + (nodePart != null));
 
                 Debug.Log("Creating RDTech...");
-                RDTech techPart = nodePart.tech = _nodePrefab.AddComponent("RDTech") as RDTech;
-                techPart.name = _newNodeName;
-                techPart.state = RDTech.State.Available;
-                techPart.techID = _newNodeName;
-                techPart.partsAssigned = new List<AvailablePart>();
-                techPart.partsPurchased = new List<AvailablePart>();
-                //RDTech techPart = nodePart.tech = _nodePrefab.GetComponent<RDTech>();
+                RDTech techPart = nodePart.tech = _nodePrefab.AddComponent<RDTech>();
+                techPart.techID = _newTechName;
                 Debug.Log("techPart exists: " + (techPart != null));
 
-                _nodePrefab.SetActive(false);
 
                 return _nodePrefab;
             }
@@ -119,38 +103,35 @@ namespace ATC
 
         #region Public Interface
 
+        public void Init()
+        {
+            Debug.Log("Running Init()");
+
+            _existingNodes.Clear();
+            _existingNodes.AddRange(TechChanger.GetKnownNodes());
+
+            if (_nodePrefab != null)
+            {
+                DestroyImmediate(_nodePrefab);
+                _nodePrefab = null;
+            }
+            
+        }
+
         public RDNode Create()
         {
 
-            Debug.Log("Attempting to create a new Tech Node");
+            GameObject clone = GameObject.Instantiate(NodePrefab) as GameObject;
+            RDNode node = clone.GetComponent<RDNode>();
+            node.tech = clone.GetComponent<RDTech>();
 
-            //GameObject nodeObject = GameObject.Instantiate(nodePrefab) as GameObject;
-            //RDNode node = nodeObject.GetComponent<RDNode>();
-            //node.tech = nodeObject.GetComponent<RDTech>();
-            //nodeObject.SetActive(true);
-
-            RDNode node = GameObject.Instantiate(nodePrefab.GetComponent("RDNode")) as RDNode;
-            node.tech = GameObject.Instantiate(nodePrefab.GetComponent("RDTech")) as RDTech;
-            node.graphics = GameObject.Instantiate(nodePrefab.GetComponent("RDNodePrefab")) as RDNodePrefab;
-            node.name = "newtech_rename";
+            node.name = _newNodeName;
+            node.children = new List<RDNode>();
             node.description = "";
-            //node.Eviscerate();
-            //node.graphics.Eviscerate();
-            node.gameObject.SetActive(true);
-
-            Debug.Log("new node is distinct from prefab: " + (!ReferenceEquals(node, nodePrefab.GetComponent("RDNode"))));
-            Debug.Log("new node has an associated tech: " + (node.tech != null));
-            Debug.Log("new node parents: " + node.parents);
-
-
-            return node;
-        }
-
-        public RDNode Create(string techId)
-        {
-            RDNode node = Create();
-
-            node.name = techId;
+            clone.transform.localPosition = NodePrefab.transform.localPosition;
+            clone.transform.parent = NodePrefab.transform.parent;
+            node.tech.Start();
+            clone.SetActive(true);
 
             return node;
         }
