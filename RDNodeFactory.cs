@@ -41,12 +41,6 @@ namespace ATC
 
         private static readonly System.Random _rng = new System.Random();
 
-        private static RDNode GetRandomExistingNode()
-        {
-            return AssetBase.RnDTechTree.GetTreeNodes()
-                                        .OrderBy(n => _rng.Next())
-                                        .FirstOrDefault(n => n.treeNode);
-        }
 
         //we should only need one instance of this to create a new item (as one would with a prototype in Javascript)
         private static GameObject _nodePrefab;
@@ -63,7 +57,6 @@ namespace ATC
 
                 Debug.Log("Creating a default Node Prefab instance.");
                 RDNode existingNode = GetRandomExistingNode();
-                //RDNode existingNode = GameObject.FindObjectsOfType(typeof(RDNode)).Cast<RDNode>().FirstOrDefault(n => n.treeNode && n.controller != null);
 
                 if (existingNode == null)
                 {
@@ -97,6 +90,17 @@ namespace ATC
 
                 return _nodePrefab;
             }
+        }
+
+        #endregion
+
+        #region Private Methods
+
+        private static RDNode GetRandomExistingNode()
+        {
+            return AssetBase.RnDTechTree.GetTreeNodes()
+                                        .OrderBy(n => _rng.Next())
+                                        .FirstOrDefault(n => n.treeNode);
         }
 
         #endregion
