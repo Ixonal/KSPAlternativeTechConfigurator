@@ -24,7 +24,8 @@ namespace ATC
 
         private List<RDNode> nodesWithConfigEntries = new List<RDNode>();
         private List<RDNode.Parent> parentConnectionsAlreadyProcessed = new List<RDNode.Parent>();
-        private List<RDNode> _newNodes = new List<RDNode>();
+        private static readonly List<RDNode> _stockNodes = new List<RDNode>();
+        private static readonly List<RDNode> _newNodes = new List<RDNode>();
 
         void Start()
         {
@@ -78,51 +79,52 @@ namespace ATC
         public void Update()
         {
             
-            if (Input.GetKeyDown(KeyCode.F6))
-                loadOnNextUpdate = true;
-
-            //if (GameObject.FindObjectOfType<RDGridArea>() == null) return;
-            //if (GameObject.FindObjectOfType<RDController>() == null) return;
+            if (Input.GetKeyDown(KeyCode.F6)) loadOnNextUpdate = true;
 
             if (loadOnNextUpdate)
             {
                 try
                 {
+                    ClearNewNodes();
+                    UpdateStockNodes();
+                    RDNodeFactory.Instance.Init();
                     LoadTree();
                 }
                 catch (Exception ex)
                 {
                     Debug.LogError("ATC: Error Loading tree - " + ex.ToString());
                 }
-                loadOnNextUpdate = false;
-            }
-
-            if (Input.GetKeyDown(KeyCode.F6))
-            {
-
-                //foreach (RDNode rdNode in AssetBase.RnDTechTree.GetTreeNodes())
-                foreach (RDNode rdNode in GetKnownNodes().Where(a => a.state != RDNode.State.HIDDEN))
+                finally
                 {
-                    Debug.Log("updating graphics for " + rdNode.gameObject.name);
-                    if (rdNode.state != RDNode.State.HIDDEN)
-                        try
-                        {
-                            Debug.Log(rdNode.graphics);
-                            rdNode.UpdateGraphics(); //this also calls "SetButtonState", which calls Setup()
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.Log(ex.Message + " " + ex.StackTrace);
-                        }
+                    loadOnNextUpdate = false;
                 }
             }
+
+            //if (Input.GetKeyDown(KeyCode.F6))
+            //{
+
+            //    //foreach (RDNode rdNode in AssetBase.RnDTechTree.GetTreeNodes())
+            //    foreach (RDNode rdNode in GetKnownNodes().Where(a => a.state != RDNode.State.HIDDEN))
+            //    {
+            //        Debug.Log("updating graphics for " + rdNode.gameObject.name);
+            //        if (rdNode.state != RDNode.State.HIDDEN)
+            //            try
+            //            {
+            //                Debug.Log(rdNode.graphics);
+            //                rdNode.UpdateGraphics(); //this also calls "SetButtonState", which calls Setup()
+            //            }
+            //            catch (Exception ex)
+            //            {
+            //                Debug.Log(ex.Message + " " + ex.StackTrace);
+            //            }
+            //    }
+            //}
 
         }
 
         void OnGUIRnDComplexSpawn()
         {
-            RDNodeFactory.Instance.Init();
-            typeof(RDGridArea).GetMethod("ZoomTo", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(GameObject.FindObjectOfType<RDGridArea>(), new object[] { 1f, true });
+            
             loadOnNextUpdate = true;
         }
 
@@ -146,6 +148,17 @@ namespace ATC
         private RDNode findStartNode()
         {
             return GetNodeNamed("node0_start");
+        }
+
+        private void UpdateStockNodes()
+        {
+            _stockNodes.Clear();
+            _stockNodes.AddRange(AssetBase.RnDTechTree.GetTreeNodes().Where(n => n.treeNode));
+        }
+
+        private void SetProperZoom()
+        {
+            typeof(RDGridArea).GetMethod("ZoomTo", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(GameObject.FindObjectOfType<RDGridArea>(), new object[] { 1f, true });
         }
 
         private void ClearNewNodes()
@@ -214,8 +227,7 @@ namespace ATC
 
                 }//end for all nodes;
 
-                //deactivated for now
-                ClearNewNodes();
+                //create new nodes
                 processNewNodes(tree);
 
 
@@ -232,13 +244,10 @@ namespace ATC
                 for (int i = 0; i < rdNode.parents.Count(); ++i)
                 {
 
-                    if (parentConnectionsAlreadyProcessed.Contains(rdNode.parents[i]))
+                    if (!parentConnectionsAlreadyProcessed.Contains(rdNode.parents[i]))
                     {
-                        //Debug.Log("Skipping auto-anchor assignment for node " + rdNode.gameObject.name);                            
-                    }
-                    else
-                    {
-                        setupAnchors(rdNode, ref rdNode.parents[i]);
+                        //Debug.Log("Skipping auto-anchor assignment for node " + rdNode.gameObject.name);   
+                        setupAnchors(rdNode, ref rdNode.parents[i]); 
                     }
 
                     //warn for anchors that cannot be displayed properly. This might happen if a user-config overrides the auto-assignment. Or if the auto-assignment screws up
@@ -263,107 +272,45 @@ namespace ATC
                     //only create RDNodes that are not yet in the Techtree
                     string newName = cfgNodeNew.GetValue("gameObjectName");
 
-                    //if (!Array.Exists<RDNode>(AssetBase.RnDTechTree.GetTreeNodes(), x => x.gameObject.name == newName))
-                    if (!GetKnownNodes().Any(rdn => rdn.gameObject.name == newName))
+                    RDNode existingNode = GetNodeNamed(newName);
+
+
+                    //RDNode newNode = createNode();
+                    RDNode newNode = RDNodeFactory.Instance.Create();
+
+                    if (newNode.tech == null)
                     {
-
-                        //RDNode newNode = createNode();
-                        RDNode newNode = RDNodeFactory.Instance.Create();
-
-                        if (newNode.tech == null)
-                        {
-                            Debug.Log("newNode.tech is null after createNode");
-                            newNode.tech = new RDTech();
-                        }
-
-
-
-                        if (newNode.gameObject == null)
-                            Debug.Log("newNode.gameObject is still null after Setup");
-
-
-                        //Debug.Log("calling rdNode.Warmup()");
-                        //newNode.Warmup(newTech);
-                        //Debug.Log("NEWNODE: after Setup(), startNode has " + findStartNode().children.Count() + " children");
-
-
-                        Debug.Log("created node and tech, now setting basic tech parameters");
-                        //setup all the basic parameters that are not handled in updatenode
-                        newNode.treeNode = true;
-                        newNode.gameObject.name = newName;
-                        newNode.name = newName.Substring(newName.IndexOf("_") + 1);
-                        newNode.tech.techID = newNode.name;
-                        newNode.tech.hideIfNoParts = false;
-
-
-
-                        Debug.Log("updating node with cfgFile-parameters");
-                        updateNode(newNode, cfgNodeNew);
-                        Debug.Log("created new RDNode " + newNode.gameObject.name + " with RDTech.title=" + newNode.tech.title + " techId=" + newNode.tech.techID);
-                        //Debug.Log("NEWNODE: after updateNode(), startNode has " + findStartNode().children.Count() + " children");
-
-                        //Debug.Log("NEWNODE: calling RegisterNode(), AssetBase.TechTree has  " + AssetBase.RnDTechTree.GetTreeNodes().Count() + " entries");
-                        //newNode.controller.RegisterNode(newNode);
-                        //Debug.Log("NEWNODE: after RegisterNode(), AssetBase.TechTree has  " + AssetBase.RnDTechTree.GetTreeNodes().Count() + " entries");
-                        //newNode.SetButtonState(RDNode.State.RESEARCHABLE);
-
-                        //newNode.Warmup(newNode.tech);
-                        //newNode.Setup(); //This sets the anchor offsets
-
-                        //newNode.SetButtonState(RDNode.State.RESEARCHABLE);
-                        //Debug.Log("calling newnode.setup");
-                        //Debug.Log("Invoking rdController.registerNode");
-                        //typeof(RDNode).GetMethod("InitializeArrows", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(newNode, null);
-
-                        //RDController rdController = GameObject.FindObjectOfType<RDController>();
-                        //if (rdController != null)
-                        //{
-                        //    Debug.Log("Registering " + newNode.name);
-                        //    rdController.RegisterNode(newNode);
-                        //    Debug.Log("Register complete.");
-                        //}
-
-
-                        newRDNodes.Add(newNode);
-
-                        _newNodes.Add(newNode);
-
-                        //addedNewNodes.Add(newName);
-                    }//endif tech not yet added
-                    else
-                    {
-                        //RDNode newNode = GameObject.FindObjectsOfType(typeof(RDNode)).Cast<RDNode>().FirstOrDefault(rdn => rdn.gameObject.name == newName);
-                        RDNode newNode = GetNodeNamed(newName);
-                        //newNode.Setup();
-                        newRDNodes.Add(newNode);
+                        Debug.Log("newNode.tech is null after createNode");
+                        newNode.tech = new RDTech();
                     }
+
+
+
+                    if (newNode.gameObject == null)
+                        Debug.Log("newNode.gameObject is still null after Setup");
+
+
+                    Debug.Log("created node and tech, now setting basic tech parameters");
+                    //setup all the basic parameters that are not handled in updatenode
+                    newNode.treeNode = true;
+                    newNode.gameObject.name = newName;
+                    newNode.name = newName.Substring(newName.IndexOf("_") + 1);
+                    newNode.tech.techID = newNode.name;
+                    newNode.tech.hideIfNoParts = false;
+
+
+
+                    Debug.Log("updating node with cfgFile-parameters");
+                    updateNode(newNode, cfgNodeNew);
+                    Debug.Log("created new RDNode " + newNode.gameObject.name + " with RDTech.title=" + newNode.tech.title + " techId=" + newNode.tech.techID);
+                        
+                    newRDNodes.Add(newNode);
+
+                    _newNodes.Add(newNode);
+
                 }//endof all newnodes
+
                 nodesWithConfigEntries.AddRange(newRDNodes);
-
-                //if (newRDNodes.Any())
-                //{
-                //    Debug.Log("Invoking Warmup");
-                //    RDTechTree rd_tree = AssetBase.RnDTechTree;
-                //    MethodInfo rd_tree_minfo = typeof(RDTechTree).GetMethod("Warmup", BindingFlags.NonPublic | BindingFlags.Instance); //.GetMethods(BindingFlags.NonPublic | BindingFlags.Instance).Where(mtd => mtd.Name.Contains("warmup")).FirstOrDefault();
-                //    rd_tree_minfo.Invoke(rd_tree, null);
-                //    Debug.Log("Warmup Complete");
-
-                //}
-
-                //foreach (RDNode node in newRDNodes)
-                //{
-                //    node.Start();
-                //}
-
-
-                //List<RDNode> rdnodes = AssetBase.RnDTechTree.GetTreeNodes().ToList();
-                //List<RDTech> rdtechs = AssetBase.RnDTechTree.GetTreeTechs().ToList();
-                //rdnodes.AddRange(newRDNodes);
-                //rdtechs.AddRange(newRDNodes.Select(rdn => rdn.tech));
-                //FieldInfo rdnodes_info = typeof(RDTechTree).GetFields(BindingFlags.NonPublic | BindingFlags.Static).Where(fld => fld.FieldType.FullName.Contains("RDNode")).FirstOrDefault();
-                //FieldInfo rdtechs_info = typeof(RDTechTree).GetFields(BindingFlags.NonPublic | BindingFlags.Static).Where(fld => fld.FieldType.FullName.Contains("RDTech")).FirstOrDefault();
-                //rdnodes_info.SetValue(null, rdnodes.ToArray());
-                //rdtechs_info.SetValue(null, rdtechs.ToArray());
 
 
             }
@@ -501,6 +448,7 @@ namespace ATC
         private void setupAnchors(RDNode target, ref RDNode.Parent connection)
         {
             RDNode source = connection.parent.node;
+            //RDNode source = GetNodeNamed(connection.parent.node.name);
 
             //Debug.Log("Setting up anchors for " + target.name);
 
@@ -512,7 +460,28 @@ namespace ATC
 
             //find main direction from outgoing node (parent) to target (connectionOwner) node to set anchor tags
             //Exception: Cannot display incoming and outgoing nodes on the same anchor
-            Vector3 connectionVec = target.transform.localPosition - source.transform.localPosition;
+            Vector3 connectionVec;
+            try
+            {
+                connectionVec = target.transform.localPosition - source.transform.localPosition;
+            }
+            catch
+            {
+                Debug.Log("A problem occurred while finding the connection vector between " + source.name + " (source) and " + target.name + " (target)");
+                try
+                {
+                    Debug.Log(target.name + " is able to access its transform: " + (target.transform != null));
+                }
+                catch { }
+
+                try
+                {
+                    Debug.Log(source.name + " is able to access its transform: " + (source.transform != null));
+                }
+                catch { }
+
+                return;
+            }
 
             //calculate/setup anchors
             List<RDNode.Anchor> possibleParentAnchors = new List<RDNode.Anchor>();
@@ -893,13 +862,26 @@ namespace ATC
             treeNode.transform.localPosition = newPos;
         }
 
-        internal static IEnumerable<RDNode> GetKnownNodes()
+        public static IEnumerable<RDNode> GetStockNodes()
         {
-            return AssetBase.RnDTechTree.GetTreeNodes().Where(n => n.treeNode).ToList();
-            //return GameObject.FindObjectsOfType<RDNode>().Where(n => n.treeNode).ToList();
+            //forcing a new list to be created so that the original isn't altered
+            return _stockNodes.ToList();
         }
 
-        internal static RDNode GetNodeNamed(string name)
+        public static IEnumerable<RDNode> GetNewNodes()
+        {
+            //forcing a new list to be created so that the original isn't altered
+            return _newNodes.ToList();
+        }
+
+        public static IEnumerable<RDNode> GetKnownNodes()
+        {
+            //return AssetBase.RnDTechTree.GetTreeNodes().Where(n => n.treeNode).ToList();
+            //return GameObject.FindObjectsOfType<RDNode>().Where(n => n.treeNode).ToList();
+            return _stockNodes.Union(_newNodes).ToList();
+        }
+
+        public static RDNode GetNodeNamed(string name)
         {
             return GetKnownNodes().FirstOrDefault(n => n.treeNode && n.gameObject.name == name);
         }
