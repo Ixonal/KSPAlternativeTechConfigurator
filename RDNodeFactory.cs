@@ -66,11 +66,8 @@ namespace ATC
                 Debug.Log("existingNode: " + existingNode);
 
                 _nodePrefab = new GameObject(_newNodeName);
-                _nodePrefab.transform.parent = existingNode.transform.parent;
-                _nodePrefab.transform.localPosition = existingNode.transform.localPosition;
                 _nodePrefab.SetActive(false);
 
-                Debug.Log("Creating RDNode...");
                 RDNode nodePart = _nodePrefab.AddComponent<RDNode>();
                 nodePart.name = _newNodeName;
                 nodePart.description = "";
@@ -80,13 +77,11 @@ namespace ATC
                 nodePart.icon = RDNode.Icon.GENERIC;
                 nodePart.parents = new RDNode.Parent[0]; //don't want this to be null, but also don't want it to have null elements
 
-                Debug.Log("nodePart exists: " + (nodePart != null));
-
-                Debug.Log("Creating RDTech...");
                 RDTech techPart = nodePart.tech = _nodePrefab.AddComponent<RDTech>();
                 techPart.techID = _newTechName;
-                Debug.Log("techPart exists: " + (techPart != null));
 
+                _nodePrefab.transform.parent = existingNode.transform.parent;
+                _nodePrefab.transform.localPosition = existingNode.transform.localPosition;
 
                 return _nodePrefab;
             }
@@ -112,7 +107,7 @@ namespace ATC
             Debug.Log("Running Init()");
 
             _existingNodes.Clear();
-            _existingNodes.AddRange(TechChanger.GetKnownNodes());
+            _existingNodes.AddRange(TechChanger.GetStockNodes());
 
             if (_nodePrefab != null)
             {
@@ -134,6 +129,8 @@ namespace ATC
             node.description = "";
             clone.transform.localPosition = NodePrefab.transform.localPosition;
             clone.transform.parent = NodePrefab.transform.parent;
+            //clone.transform.localRotation = NodePrefab.transform.localRotation;
+            //clone.transform.localScale = NodePrefab.transform.localScale;
             node.tech.Start();
             clone.SetActive(true);
 
